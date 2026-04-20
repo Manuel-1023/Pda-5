@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel de Administración | Fundación ALMORA</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+
+  <body>
+    <header class="admin-header">
+      <h1>Panel de Administración</h1>
+      <button id="logoutBtn" class="logout-btn">Cerrar sesión</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="productos">Productos</button>
+      <button class="tab-btn" data-tab="donantes">Donantes</button>
+    </nav>
+
+    <main class="admin-content">
+      <!-- PRODUCTOS -->
+      <section id="productos" class="admin-section active">
+        <h2>Productos</h2>
+        <table class="admin-table" id="productos-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Descripción</th>
+              <th>Cantidad</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button class="btn-admin" onclick="agregarItem('productos')">
+          Agregar Producto
+        </button>
+      </section>
+
+      <!-- DONANTES -->
+      <section id="donantes" class="admin-section">
+        <h2>Donantes</h2>
+        <table class="admin-table" id="donantes-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Correo</th>
+              <th>Teléfono</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button class="btn-admin" onclick="agregarItem('donantes')">
+          Agregar Donante
+        </button>
+      </section>
+    </main>
+
+    <footer class="footer-fijo">
+      © 2025 Fundación ALMORA — Panel de Administración
+    </footer>
+
+    <script>
+      const API_BASE = "http://localhost:8080/api";
+
+      async function safeJson(res) {
+        try {
+          return await res.json();
+        } catch {
+          return null;
+        }
+      }
+
+      // --- Cambiar pestañas ---
+      document.querySelectorAll(".tab-btn").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document
+            .querySelectorAll(".tab-btn")
+            .forEach((t) => t.classList.remove("active"));
+          tab.classList.add("active");
+
+          document.querySelectorAll(".admin-section").forEach((sec) => {
+            sec.classList.toggle("active", sec.id === tab.dataset.tab);
+          });
+
+          cargarDatos(tab.dataset.tab);
+        });
+      });
+
+      // --- Cargar datos ---
+      async function cargarDatos(api) {
+        try {
+          const res = await fetch(`${API_BASE}/${api}`);
+          if (!res.ok) throw new Error(`Error al cargar ${api}`);
+          const data = (await safeJson(res)) || [];
+          renderTable(api, data);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      // --- Renderizar tabla ---
+      function renderTable(seccion, data) {
+        const tbody = document.querySelector(`#${seccion}-table tbody`);
+        tbody.innerHTML = "";
+
+        if (!data.length) {
+          tbody.innerHTML = `<tr><td colspan="5">Sin registros</td></tr>`;
+          return;
+        }
+
+        data.forEach((item) => {
+          const id = item.id || item.idUsuario;
+
+          let fila = "";
+          if (seccion === "productos") {
+            fila = `
+        <td>${id}</td>
+        <td>${item.nombreProducto}</td>
+        <td>${item.tipoProducto}</td>
+        <td>${item.cantidad}</td>`;
+          }
+
+          if (seccion === "donantes") {
+            fila = `
+        <td>${id}</td>
+        <td>${item.nombre}</td>
+        <td>${item.correo}</td>
+        <td>${item.telefono || "—"}</td>`;
+          }
+
+          tbody.innerHTML += `
+      <tr>
+        ${fila}
+        <td>
+          <button onclick="editarItem('${seccion}', ${id})">✏️</button>
+          <button onclick="eliminarItem('${seccion}', ${id})">🗑️</button>
+        </td>
+      </tr>`;
+        });
+      }
+
+      async function agregarItem(seccion) {
+        try {
+          let nuevo = {};
+          let endpoint = seccion;
+
+          // --- PRODUCTOS ---
+          if (endpoint === "productos") {
+            const nombre = prompt("Nombre del producto:");
+            const cantidad = prompt("Cantidad:");
+            const tipo = prompt("Tipo o descripción:");
+            const fecha = prompt("Fecha de caducidad (YYYY-MM-DD):");
+
+            // Validación
+            if (!nombre || !cantidad || !tipo || !fecha) {
+              alert("Debe rellenar todos los campos.");
+              return;
+            }
+
+            nuevo = {
+              nombreProducto: nombre,
+              cantidad: parseInt(cantidad),
+              tipoProducto: tipo,
+              fechaCaducidad: fecha,
+            };
+          }
+
+          // --- DONANTES ---
+          else if (endpoint === "donantes") {
+            const nombre = prompt("Nombre:");
+            const correo = prompt("Correo:");
+            const telefono = prompt("Teléfono:");
+
+            // Validación
+            if (!nombre || !correo || !telefono) {
+              alert("Debe rellenar todos los campos.");
+              return;
+            }
+
+            nuevo = { nombre, correo, telefono };
+          } else {
+            return alert("Sección no soportada.");
+          }
+
+          // --- Enviar a la API ---
+          const res = await fetch(`${API_BASE}/${endpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(nuevo),
+          });
+
+          if (!res.ok) throw new Error(`Error al crear en ${endpoint}`);
+
+          alert("Registro creado correctamente.");
+          cargarDatos(endpoint, seccion);
+        } catch (err) {
+          alert("Error al crear: " + err.message);
+        }
+      }
+
+      // --- Editar ---
+      async function editarItem(seccion, id) {
+        const res = await fetch(`${API_BASE}/${seccion}/${id}`);
+        const obj = await safeJson(res);
+
+        let actualizado = {};
+
+        if (seccion === "productos") {
+          actualizado = {
+            nombreProducto: prompt("Nombre:", obj.nombreProducto),
+            cantidad: parseInt(prompt("Cantidad:", obj.cantidad)),
+            tipoProducto: prompt("Tipo:", obj.tipoProducto),
+            fechaCaducidad: prompt("Fecha:", obj.fechaCaducidad),
+          };
+        }
+
+        if (seccion === "donantes") {
+          actualizado = {
+            nombre: prompt("Nombre:", obj.nombre),
+            correo: prompt("Correo:", obj.correo),
+            telefono: prompt("Teléfono:", obj.telefono),
+          };
+        }
+
+        const putRes = await fetch(`${API_BASE}/${seccion}/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(actualizado),
+        });
+
+        if (!putRes.ok) return alert("Error al actualizar");
+
+        alert("Actualizado correctamente.");
+        cargarDatos(seccion);
+      }
+
+      // --- Eliminar ---
+      async function eliminarItem(seccion, id) {
+        if (!confirm("¿Eliminar este registro?")) return;
+
+        const res = await fetch(`${API_BASE}/${seccion}/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!res.ok) return alert("Error al eliminar");
+
+        alert("Eliminado correctamente.");
+        cargarDatos(seccion);
+      }
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("sesionActiva");
+        window.location.href = "login.html";
+      });
+
+      cargarDatos("productos");
+    </script>
+  </body>
+</html>
