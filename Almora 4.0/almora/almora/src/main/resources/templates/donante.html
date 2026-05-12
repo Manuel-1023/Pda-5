@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel Donante | Fundación ALMORA</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+
+  <body>
+    <header class="admin-header">
+      <h1>Panel Donante</h1>
+      <button id="logoutBtn" class="logout-btn">Cerrar sesión</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="perfil">Mi Perfil</button>
+      <button class="tab-btn" data-tab="donaciones">Donar</button>
+      <button class="tab-btn" data-tab="historial">Historial</button>
+      <button class="tab-btn" data-tab="contacto">Contacto</button>
+    </nav>
+
+    <main class="admin-content">
+      <!-- SECCIÓN PERFIL -->
+      <section id="perfil" class="admin-section active">
+        <h2>Mi Perfil</h2>
+        <p>
+          Bienvenido <strong id="nombreDonante"></strong>. Aquí puedes ver tus
+          datos registrados.
+        </p>
+        <table class="admin-table">
+          <tr>
+            <th>Nombre</th>
+            <td id="perfil-nombre"></td>
+          </tr>
+          <tr>
+            <th>Correo</th>
+            <td id="perfil-email"></td>
+          </tr>
+          <tr>
+            <th>Teléfono</th>
+            <td id="perfil-telefono"></td>
+          </tr>
+        </table>
+      </section>
+
+      <!-- SECCIÓN REGISTRAR DONACIÓN -->
+      <section id="donaciones" class="admin-section">
+        <h2>Registrar Donación</h2>
+        <form id="donacionForm" class="form-donacion">
+          <label>Tipo de donación (Ej: Arroz, Leche):</label>
+          <input
+            type="text"
+            id="tipo"
+            placeholder="¿Qué deseas donar?"
+            required
+          />
+
+          <label>Cantidad (Ej: 5):</label>
+          <input
+            type="number"
+            id="cantidad"
+            placeholder="Ingresa un número"
+            required
+          />
+
+          <button type="submit" class="btn-admin">Registrar Donación</button>
+        </form>
+      </section>
+
+      <!-- SECCIÓN HISTORIAL -->
+      <section id="historial" class="admin-section">
+        <h2>Historial de Donaciones</h2>
+        <table class="admin-table" id="tablaHistorial">
+          <thead>
+            <tr>
+              <th>ID Registro</th>
+              <th>Producto</th>
+              <th>Cantidad</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- SECCIÓN CONTACTO -->
+      <section id="contacto" class="admin-section">
+        <h2>Contacto con la Fundación</h2>
+        <p>
+          Si tienes alguna duda o quieres realizar una donación especial,
+          escríbenos a:
+        </p>
+        <p><strong>contacto@almora.org</strong></p>
+      </section>
+    </main>
+
+    <footer class="footer-fijo">
+      © 2025 Fundación ALMORA — Panel del Donante
+    </footer>
+
+    <script>
+      let idUsuarioLogueado = "";
+
+      // Manejo de pestañas
+      const tabs = document.querySelectorAll(".tab-btn");
+      const sections = document.querySelectorAll(".admin-section");
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          tabs.forEach((t) => t.classList.remove("active"));
+          tab.classList.add("active");
+          sections.forEach((sec) => {
+            sec.classList.toggle("active", sec.id === tab.dataset.tab);
+          });
+          if (tab.dataset.tab === "historial") cargarHistorial();
+        });
+      });
+
+      // Cargar Perfil
+      async function cargarPerfil() {
+        try {
+          const response = await fetch("/api/usuarios/perfil");
+          if (!response.ok) throw new Error("Error perfil");
+          const usuario = await response.json();
+
+          idUsuarioLogueado = usuario.idUsuario;
+          document.getElementById("nombreDonante").textContent = usuario.nombre;
+          document.getElementById("perfil-nombre").textContent = usuario.nombre;
+          document.getElementById("perfil-email").textContent = usuario.correo;
+          document.getElementById("perfil-telefono").textContent =
+            usuario.telefono ?? "No registrado";
+        } catch (error) {
+          console.error("Error al cargar perfil:", error);
+        }
+      }
+
+      // Registrar Donación
+      document
+        .getElementById("donacionForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const tipo = document.getElementById("tipo").value;
+          const cantidad = document.getElementById("cantidad").value;
+
+          // Limpiamos el envío: el producto es solo el nombre, la cantidad va aparte si tu modelo lo permite,
+          // o se guarda de forma que sea fácil de separar.
+          // Aquí lo enviamos como un array de productos limpio.
+          const nuevaDonacion = {
+            usuarioId: idUsuarioLogueado,
+            fechaDonacion: new Date().toLocaleDateString(),
+            productos: [tipo], // Solo el nombre
+            cantidad: cantidad, // Asegúrate de que tu modelo Donacion.java tenga este campo
+          };
+
+          try {
+            const res = await fetch("/api/donaciones", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(nuevaDonacion),
+            });
+            if (res.ok) {
+              alert("¡Donación registrada con éxito!");
+              document.getElementById("donacionForm").reset();
+            }
+          } catch (error) {
+            console.error("Error al registrar:", error);
+          }
+        });
+
+      // Cargar Historial
+      async function cargarHistorial() {
+        try {
+          const res = await fetch("/api/donaciones");
+          const data = await res.json();
+          const tbody = document.querySelector("#tablaHistorial tbody");
+          tbody.innerHTML = "";
+
+          const misDonaciones = data.filter(
+            (d) => d.usuarioId === idUsuarioLogueado,
+          );
+
+          if (misDonaciones.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4">Aún no has realizado donaciones.</td></tr>`;
+            return;
+          }
+
+          misDonaciones.forEach((don) => {
+            // Si el backend guarda la cantidad en el string del producto (ej: "Arroz (5)"),
+            // esta lógica la separa para que la tabla se vea bien.
+            let productoNombre = don.productos ? don.productos[0] : "—";
+            let cantidadMostrar = don.cantidad || "—";
+
+            // Corrección dinámica por si los datos viejos están mezclados
+            if (productoNombre.includes("(")) {
+              const partes = productoNombre.split("(");
+              productoNombre = partes[0].trim();
+              cantidadMostrar = partes[1].replace(")", "").trim();
+            }
+
+            tbody.innerHTML += `
+              <tr>
+                <td><small>${don.id}</small></td>
+                <td>${productoNombre}</td>
+                <td>${cantidadMostrar}</td>
+                <td>${don.fechaDonacion}</td>
+              </tr>`;
+          });
+        } catch (error) {
+          console.error("Error al cargar historial:", error);
+        }
+      }
+
+      cargarPerfil();
+      document.getElementById("logoutBtn").onclick = () =>
+        (window.location.href = "/logout");
+    </script>
+  </body>
+</html>

@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Panel de Administración | Fundación ALMORA</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+
+  <body>
+    <header class="admin-header">
+      <h1>Panel de Administración</h1>
+      <button id="logoutBtn" class="logout-btn">Cerrar sesión</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="productos">Productos</button>
+      <button class="tab-btn" data-tab="donantes">Donantes</button>
+      <button class="tab-btn" data-tab="donaciones">Donaciones</button>
+    </nav>
+
+    <main class="admin-content">
+      <!-- SECCIÓN PRODUCTOS -->
+      <section id="productos" class="admin-section active">
+        <h2>Inventario de Productos</h2>
+        <table class="admin-table" id="productos-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Descripción</th>
+              <th>Cantidad</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button class="btn-admin" onclick="agregarItem('productos')">
+          Agregar Producto
+        </button>
+      </section>
+
+      <!-- SECCIÓN DONANTES -->
+      <section id="donantes" class="admin-section">
+        <h2>Gestión de Donantes</h2>
+        <table class="admin-table" id="donantes-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Correo</th>
+              <th>Teléfono</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button class="btn-admin" onclick="agregarItem('donantes')">
+          Agregar Donante
+        </button>
+      </section>
+
+      <!-- SECCIÓN DONACIONES -->
+      <section id="donaciones" class="admin-section">
+        <h2>Registro Global de Donaciones</h2>
+        <table class="admin-table" id="donaciones-table">
+          <thead>
+            <tr>
+              <th>ID Donación</th>
+              <th>ID Donante</th>
+              <th>Fecha</th>
+              <th>Detalles</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+
+    <footer class="footer-fijo">
+      © 2025 Fundación ALMORA — Panel de Administración
+    </footer>
+
+    <script>
+      const API_BASE = "/api"; // URL relativa para evitar problemas de CORS en producción
+
+      // --- Manejo de Pestañas ---
+      document.querySelectorAll(".tab-btn").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document
+            .querySelectorAll(".tab-btn")
+            .forEach((t) => t.classList.remove("active"));
+          tab.classList.add("active");
+
+          document.querySelectorAll(".admin-section").forEach((sec) => {
+            sec.classList.toggle("active", sec.id === tab.dataset.tab);
+          });
+
+          cargarDatos(tab.dataset.tab);
+        });
+      });
+
+      // --- Cargar datos de la API ---
+      async function cargarDatos(seccion) {
+        try {
+          // Si la sección es 'donantes', apuntamos a usuarios para filtrar o al endpoint específico
+          const endpoint = seccion === "donantes" ? "donantes" : seccion;
+          const res = await fetch(`${API_BASE}/${endpoint}`);
+          if (!res.ok) throw new Error(`Error al cargar ${seccion}`);
+          const data = await res.json();
+          renderTable(seccion, data);
+        } catch (err) {
+          console.error(err);
+          const tbody = document.querySelector(
+            `#${seccion === "donaciones" ? "donaciones" : seccion}-table tbody`,
+          );
+          if (tbody)
+            tbody.innerHTML = `<tr><td colspan="5">Error al cargar datos</td></tr>`;
+        }
+      }
+
+      // --- Renderizar tablas dinámicamente ---
+      function renderTable(seccion, data) {
+        const tableId =
+          seccion === "donaciones" ? "donaciones-table" : `${seccion}-table`;
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = "";
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5">No hay registros disponibles</td></tr>`;
+          return;
+        }
+
+        data.forEach((item) => {
+          const tr = document.createElement("tr");
+          let contenido = "";
+
+          if (seccion === "productos") {
+            contenido = `
+              <td>${item.id || "—"}</td>
+              <td>${item.nombreProducto}</td>
+              <td>${item.tipoProducto}</td>
+              <td>${item.cantidad}</td>
+              <td>
+                <button onclick="editarItem('productos', '${item.id}')">✏️</button>
+                <button onclick="eliminarItem('productos', '${item.id}')">🗑️</button>
+              </td>`;
+          } else if (seccion === "donantes") {
+            const idU = item.idUsuario || item.id;
+            contenido = `
+              <td>${idU}</td>
+              <td>${item.nombre}</td>
+              <td>${item.correo}</td>
+              <td>${item.telefono || "—"}</td>
+              <td>
+                <button onclick="editarItem('donantes', '${idU}')">✏️</button>
+                <button onclick="eliminarItem('donantes', '${idU}')">🗑️</button>
+              </td>`;
+          } else if (seccion === "donaciones") {
+            contenido = `
+              <td>${item.id}</td>
+              <td>${item.usuarioId || "Anónimo"}</td>
+              <td>${item.fechaDonacion}</td>
+              <td>${item.productos ? item.productos.join(", ") : "—"}</td>`;
+          }
+
+          tr.innerHTML = contenido;
+          tbody.appendChild(tr);
+        });
+      }
+
+      // --- Agregar Nuevo ---
+      async function agregarItem(seccion) {
+        let nuevo = {};
+        if (seccion === "productos") {
+          const nombre = prompt("Nombre del producto:");
+          if (!nombre) return;
+          nuevo = {
+            nombreProducto: nombre,
+            cantidad: parseInt(prompt("Cantidad:") || 0),
+            tipoProducto: prompt("Descripción:"),
+            fechaCaducidad: prompt("Fecha caducidad (YYYY-MM-DD):"),
+          };
+        } else if (seccion === "donantes") {
+          const nombre = prompt("Nombre:");
+          if (!nombre) return;
+          nuevo = {
+            nombre: nombre,
+            correo: prompt("Correo:"),
+            telefono: prompt("Teléfono:"),
+            rol: "DONANTE",
+            password: "123", // Contraseña por defecto
+          };
+        }
+
+        const res = await fetch(`${API_BASE}/${seccion}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(nuevo),
+        });
+
+        if (res.ok) {
+          alert("Registro creado.");
+          cargarDatos(seccion);
+        }
+      }
+
+      // --- Editar ---
+      async function editarItem(seccion, id) {
+        const resGet = await fetch(`${API_BASE}/${seccion}/${id}`);
+        const obj = await resGet.json();
+
+        let actualizado = {};
+        if (seccion === "productos") {
+          actualizado = {
+            id: id,
+            nombreProducto: prompt("Nombre:", obj.nombreProducto),
+            cantidad: parseInt(prompt("Cantidad:", obj.cantidad)),
+            tipoProducto: prompt("Descripción:", obj.tipoProducto),
+          };
+        } else if (seccion === "donantes") {
+          actualizado = {
+            idUsuario: id,
+            nombre: prompt("Nombre:", obj.nombre),
+            correo: prompt("Correo:", obj.correo),
+            telefono: prompt("Teléfono:", obj.telefono),
+            rol: obj.rol,
+            password: obj.password,
+          };
+        }
+
+        const resPut = await fetch(`${API_BASE}/${seccion}/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(actualizado),
+        });
+
+        if (resPut.ok) {
+          alert("Actualizado correctamente.");
+          cargarDatos(seccion);
+        }
+      }
+
+      // --- Eliminar ---
+      async function eliminarItem(seccion, id) {
+        if (!confirm("¿Seguro que desea eliminar?")) return;
+        const res = await fetch(`${API_BASE}/${seccion}/${id}`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          alert("Eliminado.");
+          cargarDatos(seccion);
+        }
+      }
+
+      // --- Sesión ---
+      document.getElementById("logoutBtn").onclick = () => {
+        window.location.href = "/logout";
+      };
+
+      // Carga inicial
+      cargarDatos("productos");
+    </script>
+  </body>
+</html>
